@@ -17,6 +17,7 @@ packages plus a reference demo app.
 - `docs/design-proposal.md` - architecture and long-term roadmap.
 - `docs/milestone-1-implementation-plan.md` - execution plan through M1.
 - `docs/proposed-api-design.md` - proposed package APIs and contracts.
+- `docs/testing-strategy.md` - test suites, fixtures, CI, and perf protocol.
 - `docs/design-review.md` - review notes and follow-up decisions.
 
 ## Development

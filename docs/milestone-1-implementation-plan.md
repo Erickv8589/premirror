@@ -229,6 +229,11 @@ Exit criteria:
 
 ### Workstream G - Testing and Quality Gates
 
+Implementation reference:
+
+- `docs/testing-strategy.md` is the canonical execution guide for test suite
+  structure, fixture governance, CI lanes, and performance protocol.
+
 Scope:
 
 1. Unit tests:
