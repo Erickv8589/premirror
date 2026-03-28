@@ -2,42 +2,31 @@
 
 ## Status
 
-Draft v0.1 (targeting Milestone 1 implementation).
+Draft v0.2 (post-review consistency pass).
 
 ## Purpose
 
-Define the initial public API surface for Premirror as a library. This document
-is a contract proposal for package boundaries and integration flow, not final
-runtime behavior.
+Define the initial public API for Premirror packages and how they compose in a
+real integration. This is the implementer-facing contract draft for Milestone 1.
 
-## Design Goals
+## Core Design Decisions
 
-1. Keep APIs small and composable for library consumers.
-2. Preserve strict ownership boundaries:
-   - ProseMirror owns document and transactions.
-   - Composer owns line/page/fragment layout.
-   - Renderer owns visual positioning.
-3. Make deterministic composition easy to test.
-4. Support incremental evolution from Milestone 1 to advanced features.
-
-## Package Surface Overview
-
-- `@premirror/core`
-  - Shared public types and configuration schema.
-- `@premirror/composer`
-  - Layout engine APIs (`composeLayout`, policies, metrics).
-- `@premirror/prosemirror-adapter`
-  - Snapshot extraction, measurement prep, mapping bridges, plugin bundle.
-- `@premirror/react`
-  - React integration hooks/components for page rendering and diagnostics.
+1. Keep one canonical setup object for ProseMirror integration and snapshot
+   extraction.
+2. Keep measurement separate from extraction (`measureSnapshot` stays public).
+3. Make composition deterministic by requiring a measured snapshot as input.
+4. Make React composition pattern explicit (`PremirrorPageViewport` wraps
+   `ProseMirrorDoc` as the editable layer in the same visual surface).
 
 ---
 
 ## `@premirror/core`
 
-### Key types
+### Shared primitives
 
 ```ts
+export type Rect = { x: number; y: number; width: number; height: number };
+
 export type PagePreset = "letter" | "a4";
 
 export type PageSpec = {
@@ -64,22 +53,24 @@ export type LayoutPolicyConfig = {
   orphanLinesMin?: number;
   keepWithNextEnabled?: boolean;
 };
+
+export type PremirrorOptions = {
+  page: PageSpec;
+  margins: PageMargins;
+  typography: TypographyConfig;
+  policies?: LayoutPolicyConfig;
+  features?: Record<string, boolean>;
+};
 ```
 
-### Snapshot and layout contracts
+### Snapshot model
 
 ```ts
-export type DocumentSnapshot = {
-  blocks: BlockSnapshot[];
-  measuredRuns: Record<string, MeasuredRun>;
-};
-
-export type BlockSnapshot = {
-  id: string;
-  type: "paragraph" | "heading" | "blockquote" | "list_item";
-  attrs: Record<string, unknown>;
-  runs: StyledRun[];
-  pmRange: { from: number; to: number };
+export type ResolvedMarkSet = {
+  strong?: boolean;
+  em?: boolean;
+  code?: boolean;
+  linkHref?: string;
 };
 
 export type StyledRun = {
@@ -91,9 +82,93 @@ export type StyledRun = {
   atomic?: boolean;
 };
 
+export type BlockSnapshot = {
+  id: string;
+  // M1 flattens list items into paragraph-like blocks with attrs metadata.
+  type: "paragraph" | "heading" | "blockquote";
+  attrs: Record<string, unknown>;
+  runs: StyledRun[];
+  pmRange: { from: number; to: number };
+};
+
+export type UnmeasuredDocumentSnapshot = {
+  blocks: BlockSnapshot[];
+};
+
 export type MeasuredRun = {
   runId: string;
   prepared: unknown;
+};
+
+export type MeasuredDocumentSnapshot = UnmeasuredDocumentSnapshot & {
+  measuredRuns: Record<string, MeasuredRun>;
+};
+```
+
+### Layout model
+
+```ts
+export type BreakReason =
+  | "frame_overflow"
+  | "manual_page_break"
+  | "keep_with_next"
+  | "widow_orphan_protection";
+
+export type PlacedRun = {
+  runId: string;
+  text: string;
+  font: string;
+  marks: ResolvedMarkSet;
+  x: number;
+  width: number;
+  pmRange: { from: number; to: number };
+};
+
+export type LineBox = {
+  y: number;
+  height: number;
+  runs: PlacedRun[];
+  pmRange: { from: number; to: number };
+};
+
+export type BlockFragment = {
+  blockId: string;
+  fragmentIndex: number;
+  pmRange: { from: number; to: number };
+  lines: LineBox[];
+  breakReason?: BreakReason;
+};
+
+export type FrameLayout = {
+  bounds: Rect;
+  fragments: BlockFragment[];
+};
+
+export type PageLayout = {
+  index: number;
+  spec: PageSpec;
+  frames: FrameLayout[];
+};
+
+export type LayoutPoint = {
+  pageIndex: number;
+  frameIndex: number;
+  fragmentIndex: number;
+  lineIndex: number;
+  offsetInLine: number;
+};
+
+export type MappingIndex = {
+  pmPosToLayout: (pmPos: number) => LayoutPoint | null;
+  layoutToPmPos: (point: LayoutPoint) => number | null;
+};
+
+export type ComposeMetrics = {
+  extractionMs: number;
+  measurementMs: number;
+  composeMs: number;
+  pages: number;
+  blocks: number;
 };
 
 export type LayoutInput = {
@@ -108,16 +183,20 @@ export type LayoutOutput = {
   mapping: MappingIndex;
   metrics: ComposeMetrics;
 };
-```
 
-### Setup options
+export type ComposeWarning = {
+  code: string;
+  message: string;
+};
 
-```ts
-export type PremirrorOptions = {
-  page: PageSpec;
-  margins: PageMargins;
-  typography: TypographyConfig;
-  policies?: LayoutPolicyConfig;
+export type ComposeDiagnostics = {
+  warnings: ComposeWarning[];
+  timings: ComposeMetrics;
+};
+
+export type ProjectedSelection = {
+  pmRange: { from: number; to: number };
+  rects: Rect[];
 };
 ```
 
@@ -125,97 +204,88 @@ export type PremirrorOptions = {
 
 ## `@premirror/composer`
 
-### Primary API
+### Public API
 
 ```ts
-import type { DocumentSnapshot, LayoutInput, LayoutOutput } from "@premirror/core";
+import type {
+  LayoutInput,
+  LayoutOutput,
+  MeasuredDocumentSnapshot,
+} from "@premirror/core";
 
 export function composeLayout(
-  snapshot: DocumentSnapshot,
+  snapshot: MeasuredDocumentSnapshot,
   previous: LayoutOutput | null,
   input: LayoutInput,
 ): LayoutOutput;
 ```
 
-### Policy API
+Note:
 
-```ts
-export type BreakReason =
-  | "frame_overflow"
-  | "manual_page_break"
-  | "keep_with_next"
-  | "widow_orphan_protection";
-
-export type PolicyDecision = {
-  accepted: boolean;
-  reason?: BreakReason;
-};
-
-export function evaluateBreakPolicies(/* internal layout state */): PolicyDecision;
-```
-
-### Composer constraints (M1)
-
-1. `composeLayout` is deterministic given stable `snapshot` + `input`.
-2. Measurement is upstream (`snapshot.measuredRuns` already populated).
-3. Supported marks in M1: `strong`, `em`, `code`.
+- `evaluateBreakPolicies` is an internal composer helper and is not part of the
+  public package surface in M1.
 
 ---
 
 ## `@premirror/prosemirror-adapter`
 
-### Adapter creation
+### Canonical setup object
 
 ```ts
-import type { Plugin } from "prosemirror-state";
-import type { EditorState } from "prosemirror-state";
-import type { DocumentSnapshot, PremirrorOptions } from "@premirror/core";
+import type { EditorState, Plugin } from "prosemirror-state";
+import type {
+  MeasuredDocumentSnapshot,
+  PremirrorOptions,
+  UnmeasuredDocumentSnapshot,
+} from "@premirror/core";
 
-export type PremirrorAdapter = {
-  plugins: Plugin[];
-  toSnapshot: (state: EditorState) => DocumentSnapshot;
-  measureSnapshot: (snapshot: DocumentSnapshot) => DocumentSnapshot;
-  getInvalidationRange: (state: EditorState) => { from: number; to: number } | null;
+export type PremirrorCommands = {
+  insertPageBreak: () => boolean;
 };
 
-export function createProsemirrorAdapter(options: PremirrorOptions): PremirrorAdapter;
-```
+export type SchemaExtension = {
+  nodes?: Record<string, unknown>;
+  marks?: Record<string, unknown>;
+};
 
-### Plugin bundle
-
-```ts
-export type PremirrorPluginBundle = {
+export type PremirrorRuntime = {
   plugins: Plugin[];
   keymaps: Plugin[];
   commands: PremirrorCommands;
   schemaExtensions: SchemaExtension[];
+
+  toSnapshot: (state: EditorState) => UnmeasuredDocumentSnapshot;
+  measureSnapshot: (
+    snapshot: UnmeasuredDocumentSnapshot,
+  ) => MeasuredDocumentSnapshot;
+  getInvalidationRange: (state: EditorState) => { from: number; to: number } | null;
 };
+
+export function createPremirror(options: PremirrorOptions): PremirrorRuntime;
 ```
 
-### M1 schema scope
+M1 schema scope:
 
-Nodes:
-- `doc`, `paragraph`, `heading`, `blockquote`, `hard_break`, `text`
-
-Marks:
-- `strong`, `em`, `code`
+- Nodes: `doc`, `paragraph`, `heading`, `blockquote`, `hard_break`, `text`
+- Marks: `strong`, `em`, `code`
 
 ---
 
 ## `@premirror/react`
 
-### Engine wiring hook
+### Engine hook
 
 ```ts
 import type { EditorState } from "prosemirror-state";
 import type { LayoutInput, LayoutOutput } from "@premirror/core";
-import type { PremirrorAdapter } from "@premirror/prosemirror-adapter";
+import type { PremirrorRuntime } from "@premirror/prosemirror-adapter";
 
 export type UsePremirrorEngineParams = {
   editorState: EditorState;
-  adapter: PremirrorAdapter;
+  runtime: PremirrorRuntime;
   layoutInput: LayoutInput;
-  previousLayout: LayoutOutput | null;
+  // Optional override for tests/advanced control.
+  previousLayoutOverride?: LayoutOutput | null;
 };
 
 export type UsePremirrorEngineResult = {
@@ -228,14 +298,22 @@ export function usePremirrorEngine(
 ): UsePremirrorEngineResult;
 ```
 
-### Rendering components
+Behavior:
+
+- The hook stores previous layout internally by default.
+- Consumers do not need to manually thread `previousLayout` each render.
+
+### Viewport API
 
 ```ts
+import type { ReactNode } from "react";
 import type { LayoutOutput } from "@premirror/core";
 
 export type PremirrorPageViewportProps = {
   layout: LayoutOutput;
   showDebug?: boolean;
+  // Expected to contain <ProseMirrorDoc /> for M1 integrations.
+  editorLayer: ReactNode;
 };
 
 export function PremirrorPageViewport(
@@ -243,11 +321,17 @@ export function PremirrorPageViewport(
 ): JSX.Element;
 ```
 
-### Selection projection hooks
+Relationship to ProseMirror DOM:
+
+- `PremirrorPageViewport` is the visual page surface.
+- `editorLayer` is the editable PM content layer inside that surface.
+- Page chrome and debug overlays are rendered by Premirror outside PM content.
+
+### Selection projection
 
 ```ts
 import type { EditorState } from "prosemirror-state";
-import type { LayoutOutput } from "@premirror/core";
+import type { LayoutOutput, ProjectedSelection } from "@premirror/core";
 
 export function useProjectedSelection(
   editorState: EditorState,
@@ -257,65 +341,61 @@ export function useProjectedSelection(
 
 ---
 
-## End-to-End Usage (M1)
+## Integration Example (React + `react-prosemirror`)
 
-```ts
-import { createProsemirrorAdapter } from "@premirror/prosemirror-adapter";
-import { composeLayout } from "@premirror/composer";
-import { PremirrorPageViewport } from "@premirror/react";
+```tsx
+import { useMemo, useState } from "react";
+import { ProseMirror, ProseMirrorDoc, reactKeys } from "@handlewithcare/react-prosemirror";
+import { createPremirror } from "@premirror/prosemirror-adapter";
+import { usePremirrorEngine, PremirrorPageViewport } from "@premirror/react";
 
-const adapter = createProsemirrorAdapter(options);
+function PremirrorEditor({ initialState, layoutInput, options }) {
+  const [state, setState] = useState(initialState);
+  const runtime = useMemo(() => createPremirror(options), [options]);
+  const { layout, diagnostics } = usePremirrorEngine({
+    editorState: state,
+    runtime,
+    layoutInput,
+  });
 
-function runLayout(editorState, previousLayout, layoutInput) {
-  const snapshot = adapter.toSnapshot(editorState);
-  const measured = adapter.measureSnapshot(snapshot);
-  return composeLayout(measured, previousLayout, layoutInput);
+  return (
+    <ProseMirror
+      state={state}
+      plugins={[reactKeys(), ...runtime.plugins, ...runtime.keymaps]}
+      dispatchTransaction={(tr) => setState((prev) => prev.apply(tr))}
+    >
+      <PremirrorPageViewport
+        layout={layout}
+        showDebug
+        editorLayer={<ProseMirrorDoc />}
+      />
+      {/* diagnostics can be rendered in a side panel */}
+      <output hidden>{JSON.stringify(diagnostics.warnings)}</output>
+    </ProseMirror>
+  );
 }
 ```
 
 ---
 
-## Error Model (Proposed)
-
-1. Programmer errors (invalid options/types) throw synchronously.
-2. Recoverable composition issues return diagnostics with fallback behavior.
-3. Mapping misses return explicit result objects, not thrown exceptions.
-
-```ts
-export type ComposeDiagnostics = {
-  warnings: string[];
-  timings: ComposeMetrics;
-};
-```
-
-## Versioning Policy (Proposed)
+## Versioning and Freeze
 
 Before `v1.0.0`:
 
-- Minor versions may include API changes when needed.
-- Breaking changes require migration notes in `docs/`.
+- Minor versions may include API changes with migration notes.
 
-After `v1.0.0`:
-
-- Semver with deprecation windows for non-trivial API changes.
-
-## Milestone 1 API Freeze List
-
-These APIs should be considered stable by end of M1:
+Milestone 1 freeze targets:
 
 1. `PremirrorOptions`
-2. `DocumentSnapshot`
-3. `LayoutInput`
-4. `LayoutOutput`
+2. `UnmeasuredDocumentSnapshot` / `MeasuredDocumentSnapshot`
+3. `LayoutInput` / `LayoutOutput`
+4. `createPremirror`
 5. `composeLayout`
-6. `createProsemirrorAdapter`
-7. `usePremirrorEngine`
-8. `PremirrorPageViewport`
+6. `usePremirrorEngine`
+7. `PremirrorPageViewport`
 
-## Open API Questions
+## Remaining Open Questions
 
-1. Should `measureSnapshot` be public, or hidden behind `toSnapshot`?
-2. Should `composeLayout` accept explicit invalidation plans in M1?
-3. How much mapping API should be public vs internal?
-4. Should `@premirror/react` expose low-level primitives or only high-level
-   viewport components?
+1. Should `composeLayout` accept explicit invalidation plans in M1?
+2. How much of `MappingIndex` should be public vs internal?
+3. Should `@premirror/react` expose lower-level rendering primitives in M1?

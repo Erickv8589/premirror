@@ -157,17 +157,24 @@ Separate app workspace:
 ## Core Data Models (Draft Interfaces)
 
 ```ts
-type DocumentSnapshot = {
+type UnmeasuredDocumentSnapshot = {
   blocks: BlockSnapshot[];
-  measuredRuns: Record<string, MeasuredRun>;
 };
 
 type BlockSnapshot = {
   id: string;
-  type: "paragraph" | "heading" | "blockquote" | "list_item";
+  // M1 flattens list items into paragraph-like blocks with attrs metadata.
+  type: "paragraph" | "heading" | "blockquote";
   attrs: Record<string, unknown>;
   runs: StyledRun[];
   pmRange: { from: number; to: number };
+};
+
+type ResolvedMarkSet = {
+  strong?: boolean;
+  em?: boolean;
+  code?: boolean;
+  linkHref?: string;
 };
 
 type StyledRun = {
@@ -182,6 +189,17 @@ type StyledRun = {
 type MeasuredRun = {
   runId: string;
   prepared: unknown; // Pretext prepared handle, concrete type in implementation
+};
+
+type MeasuredDocumentSnapshot = UnmeasuredDocumentSnapshot & {
+  measuredRuns: Record<string, MeasuredRun>;
+};
+
+type Rect = {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
 };
 
 type LayoutInput = {
@@ -222,11 +240,43 @@ type LineBox = {
   runs: PlacedRun[];
   pmRange: { from: number; to: number };
 };
+
+type PlacedRun = {
+  runId: string;
+  x: number;
+  width: number;
+  text: string;
+  font: string;
+  marks: ResolvedMarkSet;
+  pmRange: { from: number; to: number };
+};
+
+type LayoutPoint = {
+  pageIndex: number;
+  frameIndex: number;
+  fragmentIndex: number;
+  lineIndex: number;
+  offsetInLine: number;
+};
+
+type MappingIndex = {
+  pmPosToLayout: (pmPos: number) => LayoutPoint | null;
+  layoutToPmPos: (point: LayoutPoint) => number | null;
+};
+
+type ComposeMetrics = {
+  extractionMs: number;
+  measurementMs: number;
+  composeMs: number;
+  pages: number;
+  blocks: number;
+};
 ```
 
 Implementation note:
 
-- `DocumentSnapshot` is a flat block list for M1, not a nested layout tree.
+- `UnmeasuredDocumentSnapshot` is a flat block list for M1, not a nested layout
+  tree.
 - Measured run handles are attached before `composeLayout` to keep composition
   deterministic and avoid measurement side effects in the hot path.
 
@@ -286,29 +336,35 @@ Planned evolution after pagination baseline:
 
 ```ts
 type PremirrorOptions = {
-  page: PagePreset | CustomPageSpec;
+  page: PageSpec;
+  margins: PageMargins;
   typography: TypographyConfig;
-  layoutPolicies?: LayoutPolicyConfig;
-  features?: FeatureFlags;
+  policies?: LayoutPolicyConfig;
+  features?: Record<string, boolean>;
 };
 
-type PremirrorPluginBundle = {
+type PremirrorRuntime = {
   plugins: Plugin[];
-  commands: PremirrorCommands;
   keymaps: Plugin[];
+  commands: PremirrorCommands;
   schemaExtensions: SchemaExtension[];
+  toSnapshot: (state: EditorState) => UnmeasuredDocumentSnapshot;
+  measureSnapshot: (
+    snapshot: UnmeasuredDocumentSnapshot,
+  ) => MeasuredDocumentSnapshot;
 };
 
-function createPremirror(options: PremirrorOptions): PremirrorPluginBundle;
+function createPremirror(options: PremirrorOptions): PremirrorRuntime;
 
 function composeLayout(
-  snapshot: DocumentSnapshot,
+  snapshot: MeasuredDocumentSnapshot,
   previous: LayoutOutput | null,
   input: LayoutInput,
 ): LayoutOutput;
 ```
 
-The exact API will be finalized after phase-1 implementation spike and tests.
+Canonical API details live in `docs/proposed-api-design.md`. If there is any
+conflict between this section and that document, the API design document wins.
 
 Measurement ownership decision:
 
