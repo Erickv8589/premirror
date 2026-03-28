@@ -1,17 +1,23 @@
 # Premirror Monorepo
 
-Premirror is a library for building Word-class page layout editors on the web.
-This repository is a Bun workspace monorepo containing reusable packages plus a
-demo app.
+Premirror is a library project for building Word-class page layout editors on
+the web. This repository is a Bun workspace monorepo containing reusable
+packages plus a reference demo app.
 
-## Workspace layout
+## Workspace Layout
 
 - `packages/core` - shared public types and configuration contracts.
 - `packages/composer` - pagination and composition engine.
 - `packages/prosemirror-adapter` - ProseMirror bridge and mapping contracts.
 - `packages/react` - React integration components and hooks.
-- `apps/demo` - reference application demonstrating the library.
-- `docs/design-proposal.md` - architecture and roadmap proposal.
+- `apps/demo` - reference application demonstrating library behavior.
+
+## Document Map
+
+- `docs/design-proposal.md` - architecture and long-term roadmap.
+- `docs/milestone-1-implementation-plan.md` - execution plan through M1.
+- `docs/proposed-api-design.md` - proposed package APIs and contracts.
+- `docs/design-review.md` - review notes and follow-up decisions.
 
 ## Development
 
@@ -20,32 +26,10 @@ bun install
 bun dev
 ```
 
-## Build and checks
+## Build and Checks
 
 ```sh
 bun run build
 bun run typecheck
 bun run lint
-```
-# Premirror
-
-Premirror is a library project to enable Word-class page layout editing on the
-web, built on top of ProseMirror and React.
-
-## Current focus
-
-The first implementation milestone is accurate, deterministic paper-style
-pagination. After that, the roadmap expands into multi-column layout, floating
-boxes, and other advanced document composition capabilities.
-
-## Design proposal
-
-See `docs/design-proposal.md` for the architecture proposal, milestones, and
-scope decisions.
-
-## Development
-
-```sh
-bun install
-bun dev
 ```

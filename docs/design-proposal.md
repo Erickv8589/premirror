@@ -2,7 +2,7 @@
 
 ## Status
 
-Draft v0.2 - aligned to a Bun workspace monorepo.
+Draft v0.3 - incorporates design review clarifications.
 
 ## Vision
 
@@ -72,6 +72,58 @@ Forking remains an explicit fallback if hard requirements force low-level
 changes to root mounting, selection mapping internals, or input/composition
 behavior.
 
+## Rendering Architecture (Milestone 1 Decision)
+
+Milestone 1 adopts a single `EditorView` / single `contenteditable` root model
+with composer-driven visual pagination.
+
+Chosen approach:
+
+1. ProseMirror remains the editable DOM source (`react-prosemirror` root).
+2. Premirror composer computes page/line/fragment layout from extracted snapshot
+   data (layout authority).
+3. React page UI renders composed pages from `LayoutOutput` in the same scroll
+   context, with page chrome and break diagnostics.
+4. For Milestone 1, paragraphs split in the layout model as `BlockFragment`
+   records; the source PM paragraph node remains a single logical node.
+
+Cursor and selection behavior in M1:
+
+- Native PM/contenteditable behavior remains the interaction source of truth.
+- Composer output updates on edit and drives visual page boundaries.
+- Position mapping resolves PM position <-> composed fragment/line location for
+  overlays and diagnostics.
+
+M1 user-visible model:
+
+- Continuous editable flow with page-separated visual presentation driven by the
+  composed layout model.
+- True multi-root page edit surfaces are explicitly deferred.
+
+## Ownership Contract
+
+Premirror implementation follows a strict ownership boundary:
+
+1. ProseMirror (`react-prosemirror`) owns:
+   - Document state and transactions
+   - Native editing interactions (typing, IME, clipboard, core selection state)
+2. Premirror composer owns:
+   - Line/page/fragment computation
+   - Break policy decisions
+   - Deterministic layout output and metrics
+3. Premirror renderer owns:
+   - Visual positioning of fragment nodes from `LayoutOutput`
+   - Page chrome, boundaries, guides, and debug overlays outside PM content
+4. Mapping layer owns:
+   - PM position <-> fragment/line geometry translation
+   - Selection/caret projection across split fragments
+
+Design implication:
+
+- We do not "teleport" PM document ownership.
+- We do render fragments at computed positions and can render page UI
+  independently outside PM content.
+
 ## Library Architecture
 
 Premirror is organized into four library packages:
@@ -102,26 +154,81 @@ Separate app workspace:
   - Reference implementation showcasing core and advanced features.
   - Not required by library consumers.
 
-## Core Data Models
+## Core Data Models (Draft Interfaces)
 
-1. `DocumentSnapshot`
-   - Immutable extraction of relevant PM content and style runs.
+```ts
+type DocumentSnapshot = {
+  blocks: BlockSnapshot[];
+  measuredRuns: Record<string, MeasuredRun>;
+};
 
-2. `LayoutInput`
-   - Page settings, section settings, block constraints, float constraints,
-     typography settings, and available frame geometry.
+type BlockSnapshot = {
+  id: string;
+  type: "paragraph" | "heading" | "blockquote" | "list_item";
+  attrs: Record<string, unknown>;
+  runs: StyledRun[];
+  pmRange: { from: number; to: number };
+};
 
-3. `LayoutOutput`
-   - Pages -> frames -> block fragments -> line boxes.
-   - Placement metadata and break reasons.
+type StyledRun = {
+  id: string;
+  text: string;
+  marks: ResolvedMarkSet;
+  font: string;
+  pmRange: { from: number; to: number };
+  atomic?: boolean;
+};
 
-4. `MappingIndex`
-   - Bidirectional mapping:
-     - PM position -> layout location (page/frame/line/offset)
-     - layout location -> PM position
+type MeasuredRun = {
+  runId: string;
+  prepared: unknown; // Pretext prepared handle, concrete type in implementation
+};
 
-5. `InvalidationPlan`
-   - Which blocks/sections/pages need recomposition after a transaction.
+type LayoutInput = {
+  page: PageSpec;
+  margins: PageMargins;
+  typography: TypographyConfig;
+  policies: LayoutPolicyConfig;
+};
+
+type LayoutOutput = {
+  pages: PageLayout[];
+  mapping: MappingIndex;
+  metrics: ComposeMetrics;
+};
+
+type PageLayout = {
+  index: number;
+  spec: PageSpec;
+  frames: FrameLayout[];
+};
+
+type FrameLayout = {
+  bounds: Rect;
+  fragments: BlockFragment[];
+};
+
+type BlockFragment = {
+  blockId: string;
+  fragmentIndex: number;
+  pmRange: { from: number; to: number };
+  lines: LineBox[];
+  breakReason?: BreakReason;
+};
+
+type LineBox = {
+  y: number;
+  height: number;
+  runs: PlacedRun[];
+  pmRange: { from: number; to: number };
+};
+```
+
+Implementation note:
+
+- `DocumentSnapshot` is a flat block list for M1, not a nested layout tree.
+- Measured run handles are attached before `composeLayout` to keep composition
+  deterministic and avoid measurement side effects in the hot path.
 
 ## Pagination and Composition Engine (Starting Scope)
 
@@ -133,10 +240,36 @@ Phase 1 scope is accurate page layout with pagination:
 4. Explicit/manual page breaks.
 5. Keep-with-next and basic widow/orphan policy.
 6. Deterministic page-break decisions with inspectable reasons.
+7. Explicit mark support for styled runs: `strong`, `em`, `code` in M1.
 
 Out of scope for phase 1:
 
 - Multi-column sections, floating boxes, tables, footnotes/endnotes.
+
+## Pretext Composition Pipeline (Milestone 1)
+
+Premirror uses Pretext as a measurement and line-break primitive, not as a
+complete rich-text compositor.
+
+Pipeline:
+
+1. Extract paragraph runs from ProseMirror (`prosemirror-adapter`).
+2. Resolve typography per run (including mark-driven font changes).
+3. Measure runs upstream (`prepare()`), producing run-attached measured handles.
+4. Compose lines with a styled-run packer using `layoutNextLine()` cursors.
+5. Compose lines into page frames applying page-break policies.
+
+Reference pattern:
+
+- `pretext/pages/demos/rich-note.ts` is the starting conceptual pattern for
+  multi-run composition and cursor-resume behavior.
+
+M1 line packer responsibilities:
+
+- Handle mixed-font runs in one paragraph.
+- Treat atomic inline items as indivisible runs.
+- Resolve whitespace behavior at run boundaries.
+- Preserve deterministic cursor progression for split runs across lines/pages.
 
 ## Future Layout Capabilities
 
@@ -177,6 +310,37 @@ function composeLayout(
 
 The exact API will be finalized after phase-1 implementation spike and tests.
 
+Measurement ownership decision:
+
+- Measurement is upstream of `composeLayout` (adapter/measurement service).
+- `composeLayout` consumes pre-measured run handles and remains deterministic in
+  behavior given stable inputs.
+- This separation keeps the composition hot path testable without canvas calls.
+
+Schema extension note:
+
+- `schemaExtensions` is used in M1 for pagination-specific semantics (for
+  example, explicit page-break representation) while preserving baseline PM
+  compatibility.
+
+## `react-prosemirror` Integration Boundary
+
+Planned extension points in M1:
+
+1. `ProseMirror` / `ProseMirrorDoc` as editor shell.
+2. `reactKeys()` plugin for stable node identity.
+3. `useEditorEffect` for post-update layout trigger hooks.
+4. `useEditorEventCallback` / `useEditorEventListener` for editor-bound actions.
+5. `nodeViewComponents` for block-level rendering controls.
+6. `widget()` decorations for page chrome, break markers, and diagnostics.
+
+Fork triggers (explicit):
+
+1. Need multiple editable roots (one per page) under a single document state.
+2. Need to override root DOM structure between PM output and render tree.
+3. Need low-level selection/caret painting behavior not achievable via public
+   APIs.
+
 ## Performance Strategy
 
 1. Incremental recomposition by invalidation regions, not full-doc recompute.
@@ -184,6 +348,17 @@ The exact API will be finalized after phase-1 implementation spike and tests.
 3. Separate urgent editing updates from non-urgent full reflow passes.
 4. Maintain profiling counters per transaction (compose time, invalidated nodes).
 5. Ship stress fixtures early (long docs, mixed scripts, many pages).
+
+Milestone 1 interactivity goal:
+
+- Visible-page recomposition should complete in the same interaction frame for
+  common typing edits when possible.
+- A non-blocking follow-up pass may refine non-visible regions.
+
+Medium document definition (for M1 targets):
+
+- ~50 pages, ~500 paragraphs, mixed headings/body, with `strong`/`em`/`code`
+  marks and representative inline hard breaks.
 
 ## Correctness Strategy
 
@@ -202,16 +377,24 @@ The demo app exists to validate and communicate library capability. It should:
 3. Include stress examples (long technical doc, mixed RTL/CJK content).
 4. Showcase advanced examples as features land (columns, floats, tables).
 5. Remain thin enough that consumers can copy integration patterns.
+6. Render verification in M1 uses structural assertions on the rendered page
+   tree plus layout snapshot checks (visual regression deferred).
 
 ## Delivery Plan
 
 ### Milestone 1 - Accurate Pagination Foundation
 
-- Bun monorepo and workspace packages scaffolded.
-- Page model and composition pipeline implemented.
-- Paragraph + block flow pagination with deterministic output.
-- Basic policy controls: manual break, keep-with-next, widows/orphans v1.
-- Demo page showing live editing with stable page breaks.
+Scope summary:
+
+1. Bun monorepo and workspace packages scaffolded.
+2. Page model and composition pipeline implemented.
+3. Paragraph + block flow pagination with deterministic output.
+4. Basic policy controls: manual break, keep-with-next, widows/orphans v1.
+5. Demo page showing live editing with stable page breaks.
+
+Detailed implementation plan:
+
+- See `docs/milestone-1-implementation-plan.md`.
 
 ### Milestone 2 - Editing Robustness and Performance
 
@@ -252,8 +435,8 @@ The demo app exists to validate and communicate library capability. It should:
 
 ## Immediate Next Steps
 
-1. Draft `LayoutOutput` and `MappingIndex` type schemas in `@premirror/core`.
-2. Implement a minimal composition spike in `@premirror/composer`.
-3. Add ProseMirror extraction/mapping stubs in `@premirror/prosemirror-adapter`.
-4. Add deterministic fixture tests for line/page break behavior.
-5. Expand `apps/demo` to a paginated viewport with debug panel.
+1. Finalize Milestone 1 contract types in `@premirror/core`.
+2. Land snapshot extraction + mapping round-trip scaffolding.
+3. Implement first deterministic compose pipeline with page/frame output.
+4. Wire policies v1 and expose break-reason diagnostics.
+5. Integrate into demo and lock fixture snapshots plus baseline metrics.
