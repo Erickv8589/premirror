@@ -321,6 +321,27 @@ M1 line packer responsibilities:
 - Resolve whitespace behavior at run boundaries.
 - Preserve deterministic cursor progression for split runs across lines/pages.
 
+## Pretext Demo-Derived Patterns
+
+The demos under `pretext/pages/demos` provide practical layout patterns that
+Premirror should treat as reference inputs:
+
+1. Styled run packing:
+   - `rich-note.ts` demonstrates cursor-resume behavior across mixed runs and
+     atomic inline items.
+2. Region handoff flow:
+   - `dynamic-layout.ts` shows cursor handoff between independent regions (a
+     useful mental model for frame/page continuation).
+3. Obstacle-driven wrapping:
+   - `wrap-geometry.ts` + `editorial-engine.ts` reduce complex shapes to blocked
+     horizontal intervals per line band (`carveTextLineSlots` pattern).
+4. Slot policy variants:
+   - single-slot flow and multi-slot fill are distinct behaviors and should be
+     explicit composer policies, not accidental implementation differences.
+5. Performance patterns:
+   - prepared-run caching, `requestAnimationFrame` batching, and
+     `document.fonts.ready` synchronization are baseline operational patterns.
+
 ## Future Layout Capabilities
 
 Planned evolution after pagination baseline:

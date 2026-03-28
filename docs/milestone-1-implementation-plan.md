@@ -129,16 +129,25 @@ Scope:
 4. Produce `LayoutOutput` with:
    - pages, frames, block fragments, line boxes
    - break reasons and compose metrics
+5. Introduce obstacle-ready band model (M1 scoped):
+   - represent blocked horizontal intervals per line band
+   - apply `carveTextLineSlots`-style slot carving as a composer primitive
+   - keep obstacle inputs optional in M1, but first-class in contracts
 
 Deliverables:
 
 - Deterministic `composeLayout()` implementation.
 - Structured break reason model for debugging and tests.
+- Styled run packer with atomic inline handling and stable cursor continuation.
+- Explicit slot policy parameter:
+  - `single_slot_flow` (M1 default)
+  - `multi_slot_fill` (defined but may remain feature-flagged/deferred)
 
 Exit criteria:
 
 - Same `DocumentSnapshot + LayoutInput` always yields identical `LayoutOutput`.
 - Snapshot tests pass across fixture corpus.
+- Slot policy behavior is deterministic and covered by targeted fixtures.
 
 ### Workstream D - Policies v1 (`@premirror/composer`)
 
@@ -300,7 +309,7 @@ Exit criteria:
 1. Sequence 1: lock rendering architecture decision + contracts + adapter
    skeleton + fixture harness.
 2. Sequence 2: composer core without policies, deterministic snapshots.
-3. Sequence 3: policies v1 and mapping round-trip hardening.
+3. Sequence 3: policies v1, slot policy behavior, and mapping round-trip hardening.
 4. Sequence 4: React integration package + demo paged viewport.
 5. Sequence 5: instrumentation, optimization pass, docs and API cleanup.
 

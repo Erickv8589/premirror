@@ -125,6 +125,10 @@ M1 baseline targets:
 4. Keep-with-next + widow/orphan policy scenarios.
 5. Multi-page overflow and repeated reflow cases.
 6. Mixed-script sample (LTR/RTL/CJK representative content).
+7. Styled-run packer with atomic inline items (rich-note-style fixture).
+8. Region handoff continuity (cursor continuation across two frames).
+9. Slot carving behavior with blocked intervals (single-slot flow baseline).
+10. Optional feature-flag fixture for multi-slot fill behavior.
 
 ## Fixture metadata
 
@@ -231,6 +235,22 @@ Every relevant suite should assert at least:
 2. Selection ranges crossing page boundaries project into non-overlapping
    ordered rect sets.
 3. Fragment boundary mapping does not produce invalid PM positions.
+
+## Demo-Derived Regression Fixtures
+
+Add focused fixtures inspired by Pretext demos:
+
+1. `rich-runs-inline-atoms`:
+   - mixed runs + atomic inline item continuation behavior.
+2. `two-frame-cursor-handoff`:
+   - verifies deterministic continuation from frame A to frame B.
+3. `band-interval-carving`:
+   - verifies slot carving and min slot width handling.
+4. `headline-no-word-break`:
+   - verifies line-fit predicate that rejects mid-word headline breaks.
+
+These are structural regression fixtures, not visual parity tests against demo
+renderings.
 
 ---
 

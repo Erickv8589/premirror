@@ -26,6 +26,7 @@ real integration. This is the implementer-facing contract draft for Milestone 1.
 
 ```ts
 export type Rect = { x: number; y: number; width: number; height: number };
+export type Interval = { start: number; end: number };
 
 export type PagePreset = "letter" | "a4";
 
@@ -52,6 +53,8 @@ export type LayoutPolicyConfig = {
   widowLinesMin?: number;
   orphanLinesMin?: number;
   keepWithNextEnabled?: boolean;
+  minSlotWidthPx?: number;
+  slotSelectionPolicy?: "single_slot_flow" | "multi_slot_fill";
 };
 
 export type PremirrorOptions = {
@@ -176,6 +179,7 @@ export type LayoutInput = {
   margins: PageMargins;
   typography: TypographyConfig;
   policies: LayoutPolicyConfig;
+  obstacles?: BandObstacle[];
 };
 
 export type LayoutOutput = {
@@ -198,6 +202,15 @@ export type ProjectedSelection = {
   pmRange: { from: number; to: number };
   rects: Rect[];
 };
+
+export type BandObstacle = {
+  id: string;
+  // Region where obstacle can affect line bands.
+  yStart: number;
+  yEnd: number;
+  // Returns blocked x-intervals for the queried band.
+  intervalsForBand: (bandTop: number, bandBottom: number) => Interval[];
+};
 ```
 
 ---
@@ -219,6 +232,12 @@ export function composeLayout(
   input: LayoutInput,
 ): LayoutOutput;
 ```
+
+Supporting behavior:
+
+- `slotSelectionPolicy` controls how carved slots are consumed:
+  - `single_slot_flow`: choose one slot per line band (M1 default).
+  - `multi_slot_fill`: fill all slots in a band (feature-flagged/deferred path).
 
 Note:
 
@@ -375,6 +394,20 @@ function PremirrorEditor({ initialState, layoutInput, options }) {
   );
 }
 ```
+
+---
+
+## Reference Pattern Sources
+
+The following Pretext demo files are explicit design references for composer
+behavior:
+
+- `pretext/pages/demos/rich-note.ts` (styled run packing + atomic inline items)
+- `pretext/pages/demos/dynamic-layout.ts` (cursor handoff across regions)
+- `pretext/pages/demos/editorial-engine.ts` (slot-based layout behavior modes)
+- `pretext/pages/demos/wrap-geometry.ts` (obstacle interval carving primitives)
+
+These references inform algorithm shape, not strict API compatibility.
 
 ---
 
