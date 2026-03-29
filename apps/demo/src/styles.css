@@ -91,7 +91,7 @@ html, body {
   cursor: pointer;
 }
 
-.word-debug-switch[data-state="checked"] {
+.word-debug-switch[data-checked] {
   background: #bfdbfe;
   border-color: var(--accent);
 }
@@ -106,7 +106,7 @@ html, body {
   transition: transform 0.15s ease;
 }
 
-.word-debug-switch[data-state="checked"] .word-debug-thumb {
+.word-debug-switch[data-checked] .word-debug-thumb {
   transform: translateX(1.1rem);
   border-color: var(--accent);
 }
