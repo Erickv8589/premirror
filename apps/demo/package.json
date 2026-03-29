@@ -12,8 +12,8 @@
     "test": "bun test"
   },
   "dependencies": {
-    "@chenglou/pretext": "^0.0.2",
     "@base-ui-components/react": "1.0.0-rc.0",
+    "@chenglou/pretext": "^0.0.3",
     "@handlewithcare/react-prosemirror": "^3.0.0",
     "@premirror/composer": "workspace:*",
     "@premirror/core": "workspace:*",

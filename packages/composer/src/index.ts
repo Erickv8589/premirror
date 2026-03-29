@@ -28,8 +28,11 @@ function widthByPretext(text: string, font: string): number | null {
   const cached = pretextWidthCache.get(key);
   if (cached !== undefined) return cached;
   try {
-    const prepared = prepareWithSegments(text, font);
+    const prepared = prepareWithSegments(text, font, { whiteSpace: "pre-wrap" });
     const line = layoutNextLine(prepared, { segmentIndex: 0, graphemeIndex: 0 }, UNBOUNDED_WIDTH);
+    if (!line && text.length > 0) {
+      return null;
+    }
     const width = Math.max(0, line?.width ?? 0);
     pretextWidthCache.set(key, width);
     return width;
@@ -124,6 +127,10 @@ function pmPosAtRunOffset(run: StyledRun, charFrom: number, charTo: number): { f
   return { from, to };
 }
 
+function isWordChar(ch: string | undefined): boolean {
+  return ch !== undefined && /[A-Za-z0-9]/.test(ch);
+}
+
 // -----------------------------------------------------------------------------
 // Geometry: frame + obstacles (M1 single-slot flow)
 // -----------------------------------------------------------------------------
@@ -215,6 +222,130 @@ function pushPlacedSegment(
   return w;
 }
 
+function recalcLineDraft(
+  line: LineDraft,
+  measured: MeasuredDocumentSnapshot["measuredRuns"],
+): void {
+  let x = 0;
+  let pmFrom = Number.POSITIVE_INFINITY;
+  let pmTo = 0;
+  for (let i = 0; i < line.runs.length; i++) {
+    const r = line.runs[i]!;
+    const w = runWidthPx(
+      {
+        id: r.runId,
+        text: r.text,
+        font: r.font,
+        marks: r.marks,
+        pmRange: r.pmRange,
+      },
+      measured,
+    );
+    line.runs[i] = { ...r, x, width: w };
+    x += w;
+    pmFrom = Math.min(pmFrom, r.pmRange.from);
+    pmTo = Math.max(pmTo, r.pmRange.to);
+  }
+  if (line.runs.length === 0) return;
+  line.pmFrom = pmFrom;
+  line.pmTo = pmTo;
+}
+
+function splitPlacedRunAtWordBoundary(
+  run: PlacedRun,
+  keepLen: number,
+  measured: MeasuredDocumentSnapshot["measuredRuns"],
+): { left: PlacedRun; right: PlacedRun } {
+  const totalLen = run.text.length;
+  const span = Math.max(0, run.pmRange.to - run.pmRange.from);
+  const splitPos = run.pmRange.from + Math.floor((keepLen * span) / Math.max(1, totalLen));
+  const leftText = run.text.slice(0, keepLen);
+  const rightText = run.text.slice(keepLen);
+  const leftWidth = runWidthPx(
+    {
+      id: run.runId,
+      text: leftText,
+      font: run.font,
+      marks: run.marks,
+      pmRange: { from: run.pmRange.from, to: splitPos },
+    },
+    measured,
+  );
+  const rightWidth = runWidthPx(
+    {
+      id: run.runId,
+      text: rightText,
+      font: run.font,
+      marks: run.marks,
+      pmRange: { from: splitPos, to: run.pmRange.to },
+    },
+    measured,
+  );
+  return {
+    left: {
+      ...run,
+      text: leftText,
+      pmRange: { from: run.pmRange.from, to: splitPos },
+      width: leftWidth,
+    },
+    right: {
+      ...run,
+      text: rightText,
+      pmRange: { from: splitPos, to: run.pmRange.to },
+      width: rightWidth,
+    },
+  };
+}
+
+function fixWordBoundarySplits(
+  lines: LineDraft[],
+  measured: MeasuredDocumentSnapshot["measuredRuns"],
+): void {
+  const lineText = (line: LineDraft): string => line.runs.map((r) => r.text).join("");
+  const firstWordCharIndex = (text: string): number => {
+    for (let i = 0; i < text.length; i++) {
+      if (isWordChar(text[i])) return i;
+      if (text[i] === "\n") return -1;
+    }
+    return -1;
+  };
+
+  for (let i = 0; i < lines.length - 1; i++) {
+    const current = lines[i]!;
+    const next = lines[i + 1]!;
+    if (current.runs.length === 0 || next.runs.length === 0) continue;
+
+    const currentText = lineText(current);
+    const nextText = lineText(next);
+    const tail = currentText.at(-1);
+    const nextFirstWord = firstWordCharIndex(nextText);
+    if (nextFirstWord < 0) continue;
+    const head = nextText[nextFirstWord];
+    if (!isWordChar(tail) || !isWordChar(head)) continue;
+
+    const moved: PlacedRun[] = [];
+    while (current.runs.length > 0) {
+      const last = current.runs[current.runs.length - 1]!;
+      let j = last.text.length;
+      while (j > 0 && isWordChar(last.text[j - 1])) j--;
+      if (j === last.text.length) break;
+      if (j === 0) {
+        moved.unshift(last);
+        current.runs.pop();
+        continue;
+      }
+      const { left, right } = splitPlacedRunAtWordBoundary(last, j, measured);
+      current.runs[current.runs.length - 1] = left;
+      moved.unshift(right);
+      break;
+    }
+    if (moved.length === 0) continue;
+    next.runs = [...moved, ...next.runs];
+    recalcLineDraft(current, measured);
+    recalcLineDraft(next, measured);
+  }
+}
+
 function breakBlockIntoLineDrafts(
   block: BlockSnapshot,
   snapshot: MeasuredDocumentSnapshot,
@@ -247,9 +378,6 @@ function breakBlockIntoLineDrafts(
     linePmFrom = Math.min(linePmFrom, pmFrom);
     linePmTo = Math.max(linePmTo, pmTo);
   };
-
-  const isWordChar = (ch: string | undefined): boolean =>
-    ch !== undefined && /[A-Za-z0-9]/.test(ch);
 
   for (const run of block.runs) {
     const pieces = run.text.split("\n");
@@ -373,6 +501,7 @@ function breakBlockIntoLineDrafts(
     });
   }
   flushCurrentLine();
+  fixWordBoundarySplits(lines, measuredRuns);
   return lines;
 }
 

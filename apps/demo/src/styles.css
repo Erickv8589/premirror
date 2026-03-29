@@ -190,18 +190,26 @@ html, body {
 }
 
 .premirror-editor-surface .ProseMirror strong {
+  font-size: inherit;
+  line-height: inherit;
   font-weight: 700;
+  vertical-align: baseline;
 }
 
 .premirror-editor-surface .ProseMirror em {
+  font-size: inherit;
+  line-height: inherit;
   font-style: italic;
+  vertical-align: baseline;
 }
 
 .premirror-editor-surface .ProseMirror code {
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   font-size: 1em;
+  line-height: inherit;
   font-style: normal;
   font-weight: 400;
+  vertical-align: baseline;
 }
 
 .premirror-editor-surface {
@@ -222,8 +230,12 @@ html, body {
 
 .premirror-fragment-run {
   position: absolute;
+  display: inline-block;
+  font-size: inherit;
+  line-height: inherit;
   white-space: pre;
   color: #111827;
+  vertical-align: baseline;
 }
 
 .selection-overlay {

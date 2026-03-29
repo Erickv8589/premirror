@@ -19,7 +19,7 @@ import {
 import { keymap } from "prosemirror-keymap";
 import { type Node as ProseMirrorNode } from "prosemirror-model";
 import { EditorState, TextSelection, type Transaction } from "prosemirror-state";
-import { baseKeymap, joinBackward, selectNodeBackward, toggleMark } from "prosemirror-commands";
+import { baseKeymap, toggleMark } from "prosemirror-commands";
 import { history, redo, undo } from "prosemirror-history";
 import { Decoration, DecorationSet } from "prosemirror-view";
 import { useCallback, useMemo, useState } from "react";
@@ -84,22 +84,8 @@ function buildInitialState(
           dispatch(state.tr.setSelection(TextSelection.create(state.doc, pos - 1)).scrollIntoView());
           return true;
         },
-        ArrowRight: (state, dispatch) => {
-          if (!state.selection.empty) return false;
-          const pos = state.selection.from;
-          const max = Math.max(1, state.doc.content.size);
-          if (pos >= max) return false;
-          if (!dispatch) return true;
-          dispatch(state.tr.setSelection(TextSelection.create(state.doc, pos + 1)).scrollIntoView());
-          return true;
-        },
         Backspace: (state, dispatch) => {
           if (!state.selection.empty) return false;
-          const { $from } = state.selection;
-          if ($from.parent.isTextblock && $from.parentOffset === 0) {
-            if (joinBackward(state, dispatch)) return true;
-            if (selectNodeBackward(state, dispatch)) return true;
-          }
           const pos = state.selection.from;
           if (pos <= 1) return false;
           if (!dispatch) return true;

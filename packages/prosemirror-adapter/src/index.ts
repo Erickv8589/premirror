@@ -358,16 +358,18 @@ function measureSnapshotImpl(snapshot: UnmeasuredDocumentSnapshot): MeasuredDocu
   for (const block of snapshot.blocks) {
     for (const run of block.runs) {
       try {
-        const prepared = prepareWithSegments(run.text, run.font);
+        const prepared = prepareWithSegments(run.text, run.font, { whiteSpace: "pre-wrap" });
         const firstLine = layoutNextLine(
           prepared,
           { segmentIndex: 0, graphemeIndex: 0 },
           UNBOUNDED_WIDTH,
         );
+        const measuredWidth =
+          !firstLine && run.text.length > 0 ? run.text.length * 7 : (firstLine?.width ?? 0);
         measuredRuns[run.id] = {
           runId: run.id,
           prepared,
-          widthPx: firstLine?.width ?? 0,
+          widthPx: measuredWidth,
           textLength: run.text.length,
         };
       } catch {
