@@ -11,6 +11,8 @@
     "dev": "bun run --filter @premirror/demo-app dev",
     "build": "bun run --filter './{apps,packages}/*' build",
     "typecheck": "bun run --filter './{apps,packages}/*' typecheck",
-    "lint": "bun run --filter './{apps,packages}/*' lint"
+    "lint": "bun run --filter './{apps,packages}/*' lint",
+    "test": "bun run --filter './{apps,packages}/*' test",
+    "benchmark": "bun run --filter @premirror/composer benchmark"
   }
 }

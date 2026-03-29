@@ -6,8 +6,12 @@
     "module": "ESNext",
     "moduleResolution": "Bundler",
     "jsx": "react-jsx",
-    "types": ["vite/client"],
-    "noEmit": true
+    "types": ["vite/client", "bun"],
+    "noEmit": true,
+    "baseUrl": ".",
+    "paths": {
+      "@chenglou/pretext": ["./src/shims/pretext-stub.ts"]
+    }
   },
   "include": ["src", "vite.config.ts"]
 }

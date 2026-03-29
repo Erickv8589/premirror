@@ -2,10 +2,16 @@
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
     "target": "ES2022",
-    "lib": ["ES2022"],
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
     "module": "ESNext",
     "moduleResolution": "Bundler",
-    "noEmit": true
+    "jsx": "react-jsx",
+    "types": ["bun"],
+    "noEmit": true,
+    "baseUrl": ".",
+    "paths": {
+      "@chenglou/pretext": ["../prosemirror-adapter/src/shims/pretext-stub.ts"]
+    }
   },
   "include": ["src"]
 }

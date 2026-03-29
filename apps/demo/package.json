@@ -8,14 +8,31 @@
     "build": "tsc -b && vite build",
     "preview": "vite preview",
     "typecheck": "tsc -b",
-    "lint": "tsc --noEmit"
+    "lint": "tsc --noEmit",
+    "test": "bun test"
   },
   "dependencies": {
+    "@chenglou/pretext": "^0.0.2",
+    "@base-ui-components/react": "1.0.0-rc.0",
+    "@handlewithcare/react-prosemirror": "^3.0.0",
+    "@premirror/composer": "workspace:*",
     "@premirror/core": "workspace:*",
+    "@premirror/prosemirror-adapter": "workspace:*",
+    "@premirror/react": "workspace:*",
+    "prosemirror-commands": "^1.5.0",
+    "prosemirror-history": "^1.4.1",
+    "prosemirror-keymap": "^1.2.0",
+    "prosemirror-model": "^1.25.0",
+    "prosemirror-schema-basic": "^1.2.0",
+    "prosemirror-schema-list": "^1.2.0",
+    "prosemirror-state": "^1.4.3",
+    "prosemirror-view": "1.41.4",
     "react": "^19.2.0",
-    "react-dom": "^19.2.0"
+    "react-dom": "^19.2.0",
+    "react-reconciler": "0.32.0"
   },
   "devDependencies": {
+    "@types/bun": "^1.3.0",
     "@types/react": "^19.2.2",
     "@types/react-dom": "^19.2.2",
     "@vitejs/plugin-react": "^5.0.4",
