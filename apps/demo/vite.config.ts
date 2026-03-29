@@ -9,6 +9,7 @@ const pretextRoot = dirname(require.resolve("@chenglou/pretext/package.json"));
 const pretextLayout = resolve(pretextRoot, "src/layout.ts");
 
 export default defineConfig({
+  base: "/premirror/",
   plugins: [react()],
   resolve: {
     alias: {
