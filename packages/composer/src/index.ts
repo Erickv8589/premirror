@@ -497,12 +497,20 @@ export function composeLayout(
       );
 
       let useFit = fit;
-      if (useFit === 0 && currentY > 0) {
-        flushPage(reason ?? "frame_overflow");
-        continue;
-      }
-      if (useFit === 0 && currentY === 0) {
-        useFit = 1;
+      let breakReasonForSplit: BreakReason | undefined = reason;
+      if (useFit === 0) {
+        if (maxLines > 0) {
+          // Never move a whole paragraph fragment to the next page when at
+          // least one line can fit on this page. Split by line instead.
+          useFit = Math.min(remaining, maxLines);
+          breakReasonForSplit = "frame_overflow";
+        } else if (currentY > 0) {
+          flushPage(reason ?? "frame_overflow");
+          continue;
+        } else {
+          useFit = 1;
+          breakReasonForSplit = "frame_overflow";
+        }
       }
 
       const chunk = drafts.slice(lineCursor, lineCursor + useFit);
@@ -528,7 +536,7 @@ export function composeLayout(
         fragmentIndex,
         pmRange: { from: pmMin, to: pmMax },
         lines: assigned,
-        ...(willContinue ? { breakReason: reason ?? "frame_overflow" } : {}),
+        ...(willContinue ? { breakReason: breakReasonForSplit ?? "frame_overflow" } : {}),
       };
 
       const frIndex = 0;

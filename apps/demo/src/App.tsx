@@ -111,11 +111,24 @@ function clampPos(doc: ProseMirrorNode, pos: number): number {
   return Math.max(1, Math.min(pos, max));
 }
 
+function paragraphRangeFromBlockId(
+  doc: ProseMirrorNode,
+  blockId: string,
+): { from: number; to: number } | null {
+  const m = /^block-(\d+)$/.exec(blockId);
+  if (!m) return null;
+  const pos = clampPos(doc, Number.parseInt(m[1]!, 10));
+  const node = doc.nodeAt(pos);
+  if (!node || node.type.name !== "paragraph") return null;
+  return { from: pos, to: pos + node.nodeSize };
+}
+
 function paragraphRangeAtPos(
   doc: ProseMirrorNode,
   pos: number,
 ): { from: number; to: number } | null {
-  const resolved = doc.resolve(clampPos(doc, pos));
+  const clamped = clampPos(doc, pos);
+  const resolved = doc.resolve(clamped);
   for (let d = resolved.depth; d >= 0; d--) {
     const node = resolved.node(d);
     if (node.type.name !== "paragraph") continue;
@@ -172,13 +185,14 @@ function buildFragmentDecorations(
   for (const page of layout.pages) {
     for (const frame of page.frames) {
       for (const fragment of frame.fragments) {
+        const fragmentParagraph = paragraphRangeFromBlockId(doc, fragment.blockId);
         for (const line of fragment.lines) {
           const lineTop = pageTop + frame.bounds.y + line.y;
           const lineBottom = lineTop + line.height;
-          const primaryAnchor = line.pmRange.from;
           const paragraph =
-            paragraphRangeAtPos(doc, primaryAnchor) ??
-            paragraphRangeAtPos(doc, primaryAnchor > 1 ? primaryAnchor - 1 : primaryAnchor);
+            fragmentParagraph ??
+            paragraphRangeAtPos(doc, line.pmRange.from) ??
+            paragraphRangeAtPos(doc, line.pmRange.from > 1 ? line.pmRange.from - 1 : line.pmRange.from);
           if (paragraph) {
             // Paragraph box should represent full editable context width, not
             // just measured text bounds, so clicks in trailing whitespace map
@@ -198,7 +212,10 @@ function buildFragmentDecorations(
 
           for (const run of line.runs) {
             if (run.pmRange.from >= run.pmRange.to) continue;
-            const runParagraph = paragraphRangeAtPos(doc, run.pmRange.from);
+            const runParagraph =
+              fragmentParagraph ??
+              paragraphRangeAtPos(doc, run.pmRange.from) ??
+              paragraphRangeAtPos(doc, run.pmRange.from > 1 ? run.pmRange.from - 1 : run.pmRange.from);
             if (!runParagraph) continue;
             runPlacements.push({
               runFrom: run.pmRange.from,
