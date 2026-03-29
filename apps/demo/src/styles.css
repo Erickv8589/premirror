@@ -16,13 +16,20 @@ body {
 }
 
 .word-shell {
-  min-height: 100vh;
+  height: 100vh;
   display: flex;
   flex-direction: column;
+  overflow: hidden;
   background: linear-gradient(180deg, #e8ecf2 0%, #d8dee8 40%, #cfd6e0 100%);
 }
 
+html, body {
+  overflow: hidden;
+  height: 100%;
+}
+
 .word-toolbar {
+  flex-shrink: 0;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -105,6 +112,7 @@ body {
 }
 
 .doc-title-row {
+  flex-shrink: 0;
   display: flex;
   align-items: baseline;
   justify-content: space-between;
